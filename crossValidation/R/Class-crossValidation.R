@@ -7,29 +7,27 @@
 
 checkCrossValidation = function(object){
     errors = character()
-    if(object@extrapolationRange < 0){
-        msg = "extrapolationRange can't be negative!"
+    if(names(object@model) != c("predict", "fit")){
+        msg = "model should be a list with elements predict and fit!"
         errors = c(errors, msg)
     }
-    if(!object@level %in% c("global", "local")){
-        msg = "level must be one of global or local."
+    predictArguments = names(as.list(args(object@model$predict)))
+    fitArguments = names(as.list(args(object@model$predict)))
+    if(predictArguments != c("X", "y", "")){
+        msg = "model$predict should be a function with arguments X and y!"
+        errors = c(errors, msg)
+    }    
+    if(fitArguments != c("X", "")){
+        msg = "model$fit should be a function with argument X only!"
         errors = c(errors, msg)
     }
-    modelArguments = names(as.list(args(object@model)))
-    if(object@level == "global"){
-        requiredColumns = c("data", "imputationParameters")
-        missing = requiredColumns[!requiredColumns %in% modelArguments]
-        if(length(missing) > 1){
-            msg = paste("model missing required arguments:",
-                        paste(missing, collapse=", "))
-            errors = c(errors, msg)
-        }
-    } else {
-        # modelArguments should be the one argument and "", so length == 2
-        if(length(modelArguments) != 2){
-            msg = "Model should only contain one argument"
-            errors = c(errors, msg)
-        }
+    if(is.null(cvIndices) & is.null(validationIndices)){
+        msg = "cvIndices and validationIndices cannot both be NULL!"
+        errors = c(errors, msg)
+    }
+    if(!is.null(cvIndices) & !is.null(validationIndices)){
+        msg = "cvIndices and validationIndices cannot both be provided!"
+        errors = c(errors, msg)
     }
     if(length(errors) == 0)
         TRUE
@@ -61,13 +59,26 @@ checkCrossValidation = function(object){
 ##' @export crossValidation
 ##'   
 
-ensembleModel = setClass(Class = "ensembleModel",
+crossValidation = setClass(Class = "crossValidation",
     representation = representation(model = "list",
                                     xTrain = "data.table",
                                     yTrain = "numeric",
                                     xTest = "data.table",
                                     cvIndices = "numeric",
-                                    validationIndices = "numeric"),
-    prototype(extrapolationRange = 0, level = "local"),
+                                    validationIndices = "logical"),
     validity = checkCrossValidation,
     package = "crossValidation")
+
+setMethod("summary", "crossValidation", function(object){
+    cat(sprintf("Training rows:           %s", nrow(xTrain)))
+    cat(sprintf("Testing rows:            %s", nrow(xTest)))
+    if(!is.null(cvIndices))
+        cat(sprintf("Cross-validation groups: %s", length(unique(cvIndices))))
+    if(!is.null(validationIndices)){
+        cat(sprintf("Train length:            %s", sum(!validationIndices)))
+        cat(sprintf("Validation length:       %s", sum(validationIndices)))
+    }
+})
+
+
+
