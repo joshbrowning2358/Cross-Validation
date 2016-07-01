@@ -13,12 +13,12 @@ checkCrossValidation = function(object){
     }
     predictArguments = names(as.list(args(object@model$predict)))
     fitArguments = names(as.list(args(object@model$fit)))
-    if(any(predictArguments != c("X", "y", ""))){
-        msg = "model$predict should be a function with arguments X and y!"
+    if(any(predictArguments != c("model", "X", ""))){
+        msg = "model$predict should be a function with arguments model and X only!"
         errors = c(errors, msg)
     }    
-    if(any(fitArguments != c("model", "X", ""))){
-        msg = "model$fit should be a function with arguments model and X only!"
+    if(any(fitArguments != c("X", "y", ""))){
+        msg = "model$fit should be a function with arguments X and y only!"
         errors = c(errors, msg)
     }
     if(length(object@cvIndices) > 0 & length(object@validationIndices) > 0){
@@ -27,6 +27,23 @@ checkCrossValidation = function(object){
     }
     if(length(object@cvIndices) == 0 & length(object@validationIndices) == 0){
         msg = "cvIndices and validationIndices cannot both have length 0!"
+        errors = c(errors, msg)
+    }
+    n = nrow(object@xTrain)
+    if(length(object@cvIndices) != 0){
+        if(length(object@cvIndices) != n){
+            msg = "cvIndices must have length n!"
+            errors = c(errors, msg)
+        }
+    }
+    if(length(object@validationIndices) != 0){
+        if(length(object@validationIndices) != n){
+            msg = "validationIndices must have length n!"
+            errors = c(errors, msg)
+        }
+    }
+    if(length(object@yTrain) != n){
+        msg = "yTrain must have length n!"
         errors = c(errors, msg)
     }
     if(length(errors) == 0)
@@ -61,9 +78,9 @@ checkCrossValidation = function(object){
 
 crossValidation = setClass(Class = "crossValidation",
     representation = representation(model = "list",
-                                    xTrain = "Matrix",
+                                    xTrain = "data.table",
                                     yTrain = "numeric",
-                                    xTest = "Matrix",
+                                    xTest = "data.table",
                                     cvIndices = "numeric",
                                     validationIndices = "logical"),
     validity = checkCrossValidation
@@ -88,6 +105,19 @@ setMethod("summary", "crossValidation", function(object){
     }
 })
 
+setMethod("print", "crossValidation", function(x){
+    object = x
+    cat(sprintf("Training rows:           %s\n", nrow(object@xTrain)))
+    cat(sprintf("Testing rows:            %s\n", nrow(object@xTest)))
+    if(length(object@cvIndices) != 0)
+        cat(sprintf("Cross-validation groups: %s\n", length(unique(object@cvIndices))))
+    if(length(object@validationIndices) != 0){
+        cat(sprintf("Train length:            %s\n", sum(!object@validationIndices)))
+        cat(sprintf("Validation length:       %s\n", sum(object@validationIndices)))
+    }
+})
+
+
 ##' Run the cross validation
 ##' 
 ##' Runs the cross validation, computes the score on the hold out set, and 
@@ -109,9 +139,14 @@ setMethod("run", signature(object="crossValidation"), function(object, filename=
         filename = gsub("\\.csv", "", filename)
     }
     if(length(object@validationIndices) == 0){
-        runCv(object, metric)
+        file = runCv(object, metric, filename)
     } else {
-        runVal(object, metric)
+        file = runVal(object, metric, filename)
+    }
+    cat("Results of cross-validation saved in", file)
+    if(!is.null(object@xTest)){
+        file = runTrain(object, metric, filename)
+        cat("Results of final prediction (fitting on full dataset) saved in", file)
     }
 })
 
@@ -119,13 +154,13 @@ setMethod("run", signature(object="crossValidation"), function(object, filename=
 ##' 
 ##' Helper function for run.
 ##' 
-setGeneric("runCv", function(object, metric=RMSE){standardGeneric("runCv")})
-setMethod("runCv", signature(object="crossValidation"), function(object, metric){
+setGeneric("runCv", function(object, metric, filename){standardGeneric("runCv")})
+setMethod("runCv", signature(object="crossValidation"), function(object, metric, filename){
     cvGroups = unique(object@cvIndices)
     predictions = rep(NA, length(object@yTrain))
     subScore = c()
-    cat("Fitting model on", length(object@cvGroups), "cv groups...\n")
-    for(i in object@cvGroups){
+    cat("Fitting model on", length(cvGroups), "cv groups...\n")
+    for(i in cvGroups){
         filter = object@cvIndices != i
         model = object@model$fit(object@xTrain[filter, ], object@yTrain[filter])
         predictions[!filter] = object@model$predict(model, object@xTrain[!filter, ])
@@ -135,22 +170,39 @@ setMethod("runCv", signature(object="crossValidation"), function(object, metric)
     finalScore = metric(predictions, object@yTrain)
     cat("Modeling finished!  Final score: ", finalScore, "\n")
     filename = paste0(filename, "_", round(finalScore, 6), ".csv")
-    write.csv(predictions, filename)
+    write.csv(predictions, filename, row.names=FALSE)
+    return(filename)
 })
 
 ##' Run CV with validation
 ##' 
 ##' Helper function for run.
 ##' 
-setGeneric("runVal", function(object, metric=RMSE){standardGeneric("runVal")})
-setMethod("runVal", signature(object="crossValidation"), function(object, metric){
+setGeneric("runVal", function(object, metric, filename){standardGeneric("runVal")})
+setMethod("runVal", signature(object="crossValidation"), function(object, metric, filename){
     cat("Fitting model on ", sum(!object@validationIndices), " observations (",
         round(mean(!object@validationIndices), 2)*100, "%)\n", sep="")
     filter = !object@validationIndices
     model = object@model$fit(object@xTrain[filter, ], object@yTrain[filter])
     predictions = object@model$predict(model, object@xTrain[!filter, ])
     score = metric(predictions, object@yTrain[!filter])
-    cat("Modeling finished!  Final score: ", score, "\n")
-    filename = paste0(filename, "_", round(finalScore, 6), ".csv")
-    write.csv(predictions, filename)
+    cat("Cross-validation finished!  Final score: ", score, "\n")
+    filename = paste0(filename, "_", round(score, 6), ".csv")
+    write.csv(predictions, filename, row.names=FALSE)
+    return(filename)
+})
+
+##' Fit and analyze full training set
+##' 
+##' Helper function for run.
+##' 
+setGeneric("runTrain", function(object, metric, filename){standardGeneric("runTrain")})
+setMethod("runTrain", signature(object="crossValidation"), function(object, metric, filename){
+    cat("Fitting model on", nrow(object@xTrain), "observations")
+    model = object@model$fit(object@xTrain, object@yTrain)
+    predictions = object@model$predict(model, object@xTest)
+    cat("Full model finished!")
+    filename = paste0(filename, "_full.csv")
+    write.csv(predictions, filename, row.names=FALSE)
+    return(filename)
 })
