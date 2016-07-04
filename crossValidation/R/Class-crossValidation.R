@@ -127,26 +127,33 @@ setMethod("print", "crossValidation", function(x){
 ##' @param filename Where should the results be saved?
 ##' @param errorFunction A function accepting two equal length vectors and
 ##'   computing an error metric between them.
+##' @param logged Should the output of this run be written to the log file?
 ##' 
 ##' @return Writes out a file with the results, prints the score.
 ##' 
 
-setGeneric("run", function(object, filename=NULL, metric=RMSE){standardGeneric("run")})
-setMethod("run", signature(object="crossValidation"), function(object, filename=NULL, metric=RMSE){
+setGeneric("run", function(object, filename=NULL, metric=RMSE, logged = FALSE)
+    {standardGeneric("run")})
+setMethod("run", signature(object="crossValidation"),
+          function(object, filename=NULL, metric=RMSE, logged=FALSE){
+    modelKey = as.numeric(Sys.time())
     if(is.null(filename)){
-        filename = paste0(getwd(), "/", as.character(Sys.time(), "%Y%m%d%H%M%S"))
+        filename = paste0(getwd(), "/", as.character(Sys.time(), "%Y%m%d%H%M%S"), "_", modelKey)
     } else {
-        filename = gsub("\\.csv", "", filename)
+        filename = gsub("\\.csv", paste0("_", modelKey), filename)
     }
     if(length(object@validationIndices) == 0){
         file = runCv(object, metric, filename)
     } else {
         file = runVal(object, metric, filename)
     }
-    cat("Results of cross-validation saved in", file)
+    cat("Results of cross-validation saved in", file, "\n")
     if(!is.null(object@xTest)){
         file = runTrain(object, metric, filename)
-        cat("Results of final prediction (fitting on full dataset) saved in", file)
+        cat("Results of final prediction (fitting on full dataset) saved in", file, "\n")
+    }
+    if(logged){
+        logResults(object, metric, filename, modelKey)
     }
 })
 
@@ -198,11 +205,48 @@ setMethod("runVal", signature(object="crossValidation"), function(object, metric
 ##' 
 setGeneric("runTrain", function(object, metric, filename){standardGeneric("runTrain")})
 setMethod("runTrain", signature(object="crossValidation"), function(object, metric, filename){
-    cat("Fitting model on", nrow(object@xTrain), "observations")
+    cat("Fitting model on", nrow(object@xTrain), "observations\n")
     model = object@model$fit(object@xTrain, object@yTrain)
     predictions = object@model$predict(model, object@xTest)
-    cat("Full model finished!")
+    cat("Full model finished!\n")
     filename = paste0(filename, "_full.csv")
     write.csv(predictions, filename, row.names=FALSE)
     return(filename)
+})
+
+##' Log Results
+##' 
+##' Write the results of the analysis out to a log file.
+##' 
+setGeneric("logResults", function(object, metric, filename, modelKey){standardGeneric("logResults")})
+setMethod("logResults", signature(object="crossValidation"),
+          function(object, metric, filename, modelKey){
+    log_file = "results_log.txt"
+    
+    functionText = as.character(body(object@model$fit))
+    possibleModels = c("xgboost", "glm", "lm", "naiveBayes")
+    match = sapply(possibleModels, function(mod){grep(mod, functionText)})
+    suppressWarnings({
+        matchIndex = min((1:length(match))[sapply(match, function(x){length(x) > 0})])
+    })
+    if(matchIndex == Inf){
+        modelName = "Unidentified!"
+        functionCall = paste(functionText, collapse="\n")
+    } else {
+        modelName = possibleModels[matchIndex]
+        functionCall = functionText[unlist(match[matchIndex])]
+    }
+    
+    sink(log_file, append=TRUE)
+    try({
+        cat("\n")
+        cat("Environment:             R (", Sys.info()[4], ")\n", sep="")
+        cat("Model Key:              ", modelKey, "\n")
+        cat("File name:              ", filename, "\n")
+        cat("Model name:             ", modelName, "\n")
+        cat("Function call:          ", functionCall, "\n")
+        cat("Execution time:         ", Sys.time(), "\n")
+        summary(object)
+    })
+    sink()
 })
