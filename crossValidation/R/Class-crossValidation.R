@@ -144,10 +144,12 @@ setMethod("print", "crossValidation", function(x){
 ##' @return Writes out a file with the results, prints the score.
 ##' 
 
-setGeneric("run", function(object, filename=NULL, metric=RMSE, logged=FALSE)
+setGeneric("run", function(object, filename=NULL, metric=RMSE, logged=FALSE, idCol=NULL)
     {standardGeneric("run")})
 setMethod("run", signature(object="crossValidation"),
-          function(object, filename=NULL, metric=RMSE, logged=FALSE){
+          function(object, filename=NULL, metric=RMSE, logged=FALSE, idCol=NULL){
+    if(!is.null(idCol))
+        stopifnot(idCol %in% colnames(object@xTest))
     modelKey = as.numeric(Sys.time())
     if(is.null(filename)){
         filename = paste0(getwd(), "/", as.character(Sys.time(), "%Y%m%d%H%M%S"), "_", modelKey)
@@ -161,7 +163,7 @@ setMethod("run", signature(object="crossValidation"),
     }
     if(logged) cat("Results of cross-validation saved in", file, "\n")
     if(!is.null(object@xTest)){
-        file = runTrain(object, metric, filename, logged)
+        file = runTrain(object, metric, filename, logged, idCol)
         if(logged) cat("Results of final prediction (fitting on full dataset) saved in", file, "\n")
     }
     if(logged){
@@ -232,11 +234,15 @@ setMethod("runVal", signature(object="crossValidation"), function(object, metric
 ##' 
 ##' Helper function for run.
 ##' 
-setGeneric("runTrain", function(object, metric, filename, logged){standardGeneric("runTrain")})
-setMethod("runTrain", signature(object="crossValidation"), function(object, metric, filename, logged){
+setGeneric("runTrain", function(object, metric, filename, logged, idCol){standardGeneric("runTrain")})
+setMethod("runTrain", signature(object="crossValidation"), function(object, metric, filename, logged, idCol){
     cat("Fitting model on", nrow(object@xTrain), "observations\n")
     model = object@model$fit(object@xTrain, object@yTrain)
     predictions = object@model$predict(model, object@xTest)
+    if(!is.null(idCol)){
+        predictions = data.frame(object@xTest[[idCol]], predictions)
+        colnames(predictions)[1] = idCol
+    }
     cat("Full model finished!\n")
     filename = paste0(filename, "_full.csv")
     if(logged)
