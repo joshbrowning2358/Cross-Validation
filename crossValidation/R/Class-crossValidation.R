@@ -1,3 +1,6 @@
+library(ggplot2)
+library(data.table)
+
 ##' Check Cross Validation Model
 ##'
 ##' @param object An S4 object.
@@ -132,20 +135,20 @@ setMethod("print", "crossValidation", function(x){
 ##' @return Writes out a file with the results, prints the score.
 ##' 
 
-setGeneric("run", function(object, filename=NULL, metric=RMSE, logged = FALSE)
+setGeneric("run", function(object, filename=NULL, metric=RMSE, logged, plotResults)
     {standardGeneric("run")})
 setMethod("run", signature(object="crossValidation"),
-          function(object, filename=NULL, metric=RMSE, logged=FALSE){
+          function(object, filename=NULL, metric=RMSE, logged=FALSE, plotResults){
     modelKey = as.numeric(Sys.time())
     if(is.null(filename)){
-        filename = paste0(getwd(), "/", as.character(Sys.time(), "%Y%m%d%H%M%S"), "_", modelKey)
+        filename = paste0(getwd(), "/data/models/", as.character(Sys.time(), "%Y%m%d%H%M%S"), "_", modelKey)
     } else {
         filename = gsub("\\.csv", paste0("_", modelKey), filename)
     }
     if(length(object@validationIndices) == 0){
-        file = runCv(object, metric, filename)
+        file = runCv(object, metric, filename, plotResults)
     } else {
-        file = runVal(object, metric, filename)
+        file = runVal(object, metric, filename, plotResults)
     }
     cat("Results of cross-validation saved in", file, "\n")
     if(!is.null(object@xTest)){
@@ -161,8 +164,8 @@ setMethod("run", signature(object="crossValidation"),
 ##' 
 ##' Helper function for run.
 ##' 
-setGeneric("runCv", function(object, metric, filename){standardGeneric("runCv")})
-setMethod("runCv", signature(object="crossValidation"), function(object, metric, filename){
+setGeneric("runCv", function(object, metric, filename, plotResults){standardGeneric("runCv")})
+setMethod("runCv", signature(object="crossValidation"), function(object, metric, filename, plotResults){
     cvGroups = unique(object@cvIndices)
     predictions = rep(NA, length(object@yTrain))
     subScore = c()
@@ -175,6 +178,9 @@ setMethod("runCv", signature(object="crossValidation"), function(object, metric,
         cat("Model for group", i, "completed with score", subScore[length(subScore)], "\n")
     }
     finalScore = metric(predictions, object@yTrain)
+    if(plotResults){
+        plotPreds(predictions, object, filename)
+    }
     cat("Modeling finished!  Final score: ", finalScore, "\n")
     filename = paste0(filename, "_", round(finalScore, 6), ".csv")
     write.csv(predictions, filename, row.names=FALSE)
@@ -185,14 +191,17 @@ setMethod("runCv", signature(object="crossValidation"), function(object, metric,
 ##' 
 ##' Helper function for run.
 ##' 
-setGeneric("runVal", function(object, metric, filename){standardGeneric("runVal")})
-setMethod("runVal", signature(object="crossValidation"), function(object, metric, filename){
+setGeneric("runVal", function(object, metric, filename, plotResults){standardGeneric("runVal")})
+setMethod("runVal", signature(object="crossValidation"), function(object, metric, filename, plotResults){
     cat("Fitting model on ", sum(!object@validationIndices), " observations (",
         round(mean(!object@validationIndices), 2)*100, "%)\n", sep="")
     filter = !object@validationIndices
     model = object@model$fit(object@xTrain[filter, ], object@yTrain[filter])
     predictions = object@model$predict(model, object@xTrain[!filter, ])
     score = metric(predictions, object@yTrain[!filter])
+    if(plotResults){
+        plotPreds(predictions, object, filename)
+    }
     cat("Cross-validation finished!  Final score: ", score, "\n")
     filename = paste0(filename, "_", round(score, 6), ".csv")
     write.csv(predictions, filename, row.names=FALSE)
@@ -249,4 +258,26 @@ setMethod("logResults", signature(object="crossValidation"),
         summary(object)
     })
     sink()
+})
+
+
+##' Plot Predictions
+##' 
+setGeneric("plotPreds", function(preds, object, filename){standardGeneric("plotPreds")})
+setMethod("plotPreds", signature(object="crossValidation"), function(preds, object, filename){
+    suppressWarnings(dir.create("plots"))
+    for(col in colnames(object@xTrain)){
+        plotFile = paste0("plots/", filename, "_", col, ".png")
+        d = data.frame(Prediction = preds, var = object@xTrain[[col]])
+        ggsave(plotFile,
+               ggplot(d, aes(x=var, y=Prediction)) + geom_smooth() +
+                   labs(x = col)
+               ,width=10, height=10)
+    }
+    plotFile = paste0("plots/", filename, "_target.png")
+    d = data.frame(Prediction = preds, target = object@yTrain)
+    ggsave(plotFile,
+           ggplot(d, aes(x=target, y=Prediction)) + geom_smooth() +
+               labs(x = col)
+           ,width=10, height=10)
 })
