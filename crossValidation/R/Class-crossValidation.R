@@ -1,6 +1,7 @@
 library(ggplot2)
 library(data.table)
 library(gridExtra)
+library(DEoptim)
 
 ##' Check Cross Validation Model
 ##'
