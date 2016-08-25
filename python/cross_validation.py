@@ -1,7 +1,7 @@
+import re
+
 import pandas as pd
 import numpy as np
-import re
-import csv
 
 pd.options.mode.chained_assignment = None
 
@@ -87,15 +87,15 @@ class CrossValidation:
     def _run_cv(self, model, filename):
         error_metric = pd.DataFrame({'fold': [], 'error': []})
         folds_to_run = self.train[self.fold_col].unique()
-        cv_prediction = np.repeat(np.nan, len(self.train))
+        self.train['cv_prediction'] = np.repeat(np.nan, len(self.train))
         for fold_number in folds_to_run:
-            error = self._run_cv_fold(model, fold_number, cv_prediction)
+            error = self._run_cv_fold(model, fold_number)
             error_metric = error_metric.append({'fold': fold_number, 'error': error}, ignore_index=True)
             print 'Error for fold {} was: {}'.format(fold_number, str(error))
-        total_error = round(self.metric(self.train.ix[:, self.y_col], cv_prediction), 6)
+        total_error = round(self.metric(self.train.ix[:, self.y_col], self.train['cv_prediction']), 6)
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(total_error) + '_cv.csv'
-            out = pd.DataFrame({self.id_col: self.train[self.id_col], 'cv_prediction': cv_prediction})
+            out = self.train.ix[:, [self.id_col, 'cv_prediction']]
             out.to_csv(file_, ',', header=True, cols=[self.id_col, 'cv_prediction'], index=False)
             print 'Cross validation results saved in ' + file_
         print 'Error was: ' + str(total_error)
@@ -103,12 +103,12 @@ class CrossValidation:
 
     def _run_validation(self, model, filename):
         fold_number = np.min(self.train[self.fold_col])
-        cv_prediction = np.repeat(np.nan, len(self.train))
-        error = self._run_cv_fold(model, fold_number, cv_prediction)
+        self.train['cv_prediction'] = np.repeat(np.nan, len(self.train))
+        error = self._run_cv_fold(model, fold_number)
         error_metric = pd.DataFrame({'fold': [fold_number], 'error': [error]})
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(round(error, 6)) + '_cv.csv'
-            out = pd.DataFrame({self.id_col: self.train[self.id_col], 'cv_prediction': cv_prediction})
+            out = self.train.ix[:, [self.id_col, 'cv_prediction']]
             out.to_csv(file_, ',', header=True, cols=[self.id_col, 'cv_prediction'], index=False)
             print 'Validation results saved in ' + file_
         print 'Error was: ' + str(error)
@@ -132,14 +132,14 @@ class CrossValidation:
         fold_numbers = np.random.permutation(range(fold_cnt)*records_per_fold)
         self.train['fold_'] = fold_numbers[:self.train.shape[0]]
 
-    def _run_cv_fold(self, m, fold_number, cv_prediction):
+    def _run_cv_fold(self, m, fold_number):
         cv_filter = self.train[self.fold_col] == fold_number
         train_filter = [not x for x in cv_filter]
         m.fit(X=self.train.ix[train_filter, :], y=self.train.ix[train_filter, self.y_col])
         prediction = m.predict(X=self.train.ix[cv_filter, :])
-        cv_prediction = [pred if cv else old for pred, old, cv in zip(prediction, cv_prediction, cv_filter)]
+        self.train.ix[cv_filter, 'cv_prediction'] = prediction
         return self.metric(self.train.ix[cv_filter, self.y_col], prediction)
 
     @staticmethod
     def write_csv(data, _file):
-        data.to_csv(file, ',', header=True, engine='python')
+        data.to_csv(_file, ',', header=True, engine='python')
