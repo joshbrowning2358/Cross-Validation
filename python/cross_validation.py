@@ -55,7 +55,7 @@ class CrossValidation:
             filename = re.sub("\\.csv", "_" + self.model_key, filename)
         if self.cv_type in ['time_validation', 'cross_validation']:
             score = self._run_cv(model, filename)
-        elif self.cv_type == 'validation':
+        elif self.cv_type == 'single_validation':
             score = self._run_validation(model, filename)
         else:
             raise TypeError('Validation type {} not yet implemented!'.format(self.cv_type))
