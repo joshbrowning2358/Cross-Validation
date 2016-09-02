@@ -73,7 +73,7 @@ class CrossValidation:
         total_error = round(self.metric(self.target, cv_prediction), 6)
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(total_error) + '_cv.csv'
-            out = pd.DataFrame({'id': self.id_col, 'cv_prediction': cv_prediction})
+            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
             out.to_csv(file_, ',', header=True, cols=['id', 'cv_prediction'], index=False)
             print 'Cross validation results saved in ' + file_
         print 'Error was: ' + str(total_error)
@@ -86,7 +86,7 @@ class CrossValidation:
         error_metric = pd.DataFrame({'fold': [fold_number], 'error': [error]})
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(round(error, 6)) + '_cv.csv'
-            out = pd.DataFrame({'id': self.id_col, 'cv_prediction': cv_prediction})
+            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
             out.to_csv(file_, ',', header=True, cols=['id', 'cv_prediction'], index=False)
             print 'Validation results saved in ' + file_
         print 'Error was: ' + str(error)
@@ -97,8 +97,8 @@ class CrossValidation:
         prediction = model.predict(self.X_test)
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + '_full.csv'
-            out = pd.DataFrame({'id': self.id_col, 'prediction': prediction})
-            out.to_csv(file_, ',', header=True, cols=['id', 'prediction'], index=False)
+            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(prediction)], axis=1)
+            out.to_csv(file_, ',', header=True, index=False)
             print 'Final predictions saved in ' + file_
 
     def _assign_cv_fold(self):
