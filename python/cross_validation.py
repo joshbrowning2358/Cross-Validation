@@ -37,7 +37,7 @@ class CrossValidation:
             raise TypeError('target must be a np.ndarray!')
         if cv_time:
             self.cv_type = 'time_validation'
-        if id_col is not None:
+        if id_col_name is not None:
             self.id_col_name = id_col_name
             self.id_col = X_test[id_col_name]
         else:
@@ -77,7 +77,7 @@ class CrossValidation:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(total_error) + '_cv.csv'
             out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
             if out.shape[1] > 2: # categorical predictions
-                out.columns =
+                out.columns = [self.id_col_name] + list(set(self.target))
             out.to_csv(file_, ',', header=True, index=False)
             print 'Cross validation results saved in ' + file_
         print 'Error was: ' + str(total_error)
@@ -91,6 +91,8 @@ class CrossValidation:
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(round(error, 6)) + '_cv.csv'
             out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
+            if out.shape[1] > 2: # categorical predictions
+                out.columns = [self.id_col_name] + list(set(self.target))
             out.to_csv(file_, ',', header=True, index=False)
             print 'Validation results saved in ' + file_
         print 'Error was: ' + str(error)
@@ -102,6 +104,8 @@ class CrossValidation:
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + '_full.csv'
             out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(prediction)], axis=1)
+            if out.shape[1] > 2: # categorical predictions
+                out.columns = [self.id_col_name] + list(set(self.target))
             out.to_csv(file_, ',', header=True, index=False)
             print 'Final predictions saved in ' + file_
 
