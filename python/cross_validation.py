@@ -12,7 +12,7 @@ class CrossValidation:
     """
 
     def __init__(self, X_train, target, X_test, metric, cv_index=None, validation_index=None,
-                 cv_time=False, id_col=None, logged=False):
+                 cv_time=False, id_col_name=None, logged=False):
         """
         :param metric: A function accepting two vectors and computing an error metric.
         """
@@ -38,9 +38,11 @@ class CrossValidation:
         if cv_time:
             self.cv_type = 'time_validation'
         if id_col is not None:
-            self.id_col = id_col
+            self.id_col_name = id_col_name
+            self.id_col = X_test[id_col_name]
         else:
             self.id_col = range(self.X_test.shape[0])
+            self.id_col_name = 'id'
         self.model_key = str(np.random.randint(100000)) + str(np.random.randint(100000))
         self.logged = logged
 
@@ -73,8 +75,10 @@ class CrossValidation:
         total_error = round(self.metric(self.target, cv_prediction), 6)
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(total_error) + '_cv.csv'
-            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
-            out.to_csv(file_, ',', header=True, cols=['id', 'cv_prediction'], index=False)
+            out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
+            if out.shape[1] > 2: # categorical predictions
+                out.columns =
+            out.to_csv(file_, ',', header=True, index=False)
             print 'Cross validation results saved in ' + file_
         print 'Error was: ' + str(total_error)
         return error_metric
@@ -86,8 +90,8 @@ class CrossValidation:
         error_metric = pd.DataFrame({'fold': [fold_number], 'error': [error]})
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + str(round(error, 6)) + '_cv.csv'
-            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
-            out.to_csv(file_, ',', header=True, cols=['id', 'cv_prediction'], index=False)
+            out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(cv_prediction)], axis=1)
+            out.to_csv(file_, ',', header=True, index=False)
             print 'Validation results saved in ' + file_
         print 'Error was: ' + str(error)
         return error_metric
@@ -97,7 +101,7 @@ class CrossValidation:
         prediction = model.predict(self.X_test)
         if self.logged:
             file_ = re.sub('.csv', '', filename) + '_' + self.model_key + '_full.csv'
-            out = pd.concat([pd.DataFrame({'id': self.id_col}), pd.DataFrame(prediction)], axis=1)
+            out = pd.concat([pd.DataFrame({self.id_col_name: self.id_col}), pd.DataFrame(prediction)], axis=1)
             out.to_csv(file_, ',', header=True, index=False)
             print 'Final predictions saved in ' + file_
 
